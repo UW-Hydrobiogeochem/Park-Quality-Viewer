@@ -12,7 +12,10 @@
 # data will come in different projections --> will need to reconcile
 # geopandas.org for importing shapefiles
 # https://geopandas.org/en/stable/docs/user_guide/io.html
+# next step (jan 5): Becca practice import with smaller data. json file of King County parks that Spencer has al
 
+ geopandas.read_file("Data/Parks_in_King_County___park_area.geojson")
+#Parks_in_King_County___park_area.geojson
 
 # Clip data to area of interest --> both layers
 # clip with a new polygon that is area of interest or bounding box of coordinates
