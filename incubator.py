@@ -14,8 +14,9 @@
 # https://geopandas.org/en/stable/docs/user_guide/io.html
 # next step (jan 5): Becca practice import with smaller data. json file of King County parks that Spencer has al
 
- geopandas.read_file("Data/Parks_in_King_County___park_area.geojson")
-#Parks_in_King_County___park_area.geojson
+pip install geopandas # not sure if I have to do this eash time or only once
+import geopandas # not sure if I have to do this eash time or only once
+parks = geopandas.read_file("../Incubator2022/Data/aoi.geojson")
 
 # Clip data to area of interest --> both layers
 # clip with a new polygon that is area of interest or bounding box of coordinates
