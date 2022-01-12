@@ -1,3 +1,6 @@
 
 # Don't push any of these files to the repo
 data/
+
+.DS_Store
+
