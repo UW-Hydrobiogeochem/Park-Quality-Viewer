@@ -15,6 +15,7 @@
 import geopandas as gpd
 import fiona
 import matplotlib.pyplot as plt
+import pandas as pd
 
 # ------ Import Data -----------------
 # polygons representing parks + environmental layer (grid?)
@@ -39,33 +40,57 @@ water303 = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',
 # mask
 aoi = gpd.read_file("Data/aoi.geojson")
 
+# census data shape file
+blockgroup = gpd.read_file("data/bg10/bg10.shp")
+# to do -- clip out area of interest and save a new shp file for working in project
+blockgroup.dtypes
+
+# air quality data
+pm25 = pd.read_csv("data/CACES_PM25_2015_censusblock.csv")
+pm25.dtypes
+# to connect with air quality data. Do a merge of the data sets using a code, fips key
+
 # Inspect Data
 # look at tabular data
 parks.head()
 water.head()
 water303.head()
 aoi.head()
+pm25.head()
+blockgroup.head()
 
 # ---------- align projections
 parks.crs
 water.crs
 water303.crs
 aoi.crs
+blockgroup.crs
 # note: parks, water and aoi are <Geographic 2D CRS: EPSG:4326>
 # note: water303 is <Derived Projected CRS: EPSG:2927>
+# note: census block is in NAD83
 # convert water 303 data to same crs as parks county park and aoi
 water303 = water303.to_crs(4326)
+blockgroup = blockgroup.to_crs(4326)
+
+# ------- merge air quality data with block group data
+blockgroup_int = blockgroup.astype({'GEOID10':"int64"}) # converting data types for merge
+blockgroup_int.dtypes
+blockgroup_pm25 = blockgroup_int.merge(pm25, left_on='GEOID10', right_on='fips')
 
 # ---------- clip data with aoi
 parks_clip = parks.clip(aoi)
 water_clip = water.clip(aoi)
 water303_clip = water303.clip(aoi)
+blockgroup_pm25_clip = blockgroup_pm25.clip(aoi)
 
 # ----------- make a plot 
 base = parks_clip.plot(color="green")
 water_clip.plot(ax=base,color="blue")
 water303_clip.plot(ax=base,color="red")
 aoi.boundary.plot(ax=base,color="black")
+plt.show()
+
+blockgroup_pm25_clip.plot()
 plt.show()
 
 # Clip data to area of interest --> both layers
