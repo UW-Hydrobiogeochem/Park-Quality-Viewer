@@ -12,26 +12,60 @@
 # code does run without those two lines, with just importing geopandas and reading data
 #$ python get-pip.py
 #pip install geopandas # not sure if I have to do this eash time or only once
-import geopandas
+import geopandas as gpd
+import fiona
 import matplotlib.pyplot as plt
 
-# Import Data
+# ------ Import Data -----------------
 # polygons representing parks + environmental layer (grid?)
 # ideally, enviornmental data is at higher resolution than park data
 # data will come in different projections --> will need to reconcile
 # geopandas.org for importing shapefiles
 # https://geopandas.org/en/stable/docs/user_guide/io.html
 # next step (jan 5): Becca practice import with smaller data. json file of King County parks that Spencer has al
-parks = geopandas.read_file("Data/Parks_in_King_County___park_area.geojson")
-aoi = geopandas.read_file("Data/aoi.geojson")
+
+# King County Data
+parks = gpd.read_file("Data/Parks_in_King_County___park_area.geojson")
+water = gpd.read_file("Data/Open_water_for_King_County_and_portions_of_adjacent_counties___wtrbdy_area.geojson")
+
+# WA DEQ polluted water bodies
+fiona.listlayers("data/WQ_ENV_WQAssessmentCurrent.gdb")
+# ['WQ_ENV_WQAssessmentCurrent_WQAssessmentCurrent_305b',
+#  'WQ_ENV_WQAssessmentCurrent_WQAssessmentCurrent_303d',
+#  'WQ_ENV_WQAssessmentCurrent_WQACurrent303d',
+#  'WQ_ENV_WQAssessmentCurrent_WQACurrent305b']
+water303 = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',layer=2)
+
+# mask
+aoi = gpd.read_file("Data/aoi.geojson")
 
 # Inspect Data
 # look at tabular data
 parks.head()
+water.head()
+water303.head()
 aoi.head()
-# make a plot 
-base = parks.plot(color="green")
-aoi.boundary.plot(ax=base, color="black")
+
+# ---------- align projections
+parks.crs
+water.crs
+water303.crs
+aoi.crs
+# note: parks, water and aoi are <Geographic 2D CRS: EPSG:4326>
+# note: water303 is <Derived Projected CRS: EPSG:2927>
+# convert water 303 data to same crs as parks county park and aoi
+water303 = water303.to_crs(4326)
+
+# ---------- clip data with aoi
+parks_clip = parks.clip(aoi)
+water_clip = water.clip(aoi)
+water303_clip = water303.clip(aoi)
+
+# ----------- make a plot 
+base = parks_clip.plot(color="green")
+water_clip.plot(ax=base,color="blue")
+water303_clip.plot(ax=base,color="red")
+aoi.boundary.plot(ax=base,color="black")
 plt.show()
 
 # Clip data to area of interest --> both layers
