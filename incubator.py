@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 # geopandas.org for importing shapefiles
 # https://geopandas.org/en/stable/docs/user_guide/io.html
 # next step (jan 5): Becca practice import with smaller data. json file of King County parks that Spencer has al
-parks = geopandas.read_file("Data/king_county_parks.geojson")
+parks = geopandas.read_file("Data/Parks_in_King_County___park_area.geojson")
 aoi = geopandas.read_file("Data/aoi.geojson")
 
 # Inspect Data
