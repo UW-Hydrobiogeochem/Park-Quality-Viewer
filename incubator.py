@@ -78,6 +78,7 @@ blockgroup = blockgroup.to_crs(4326)
 blockgroup_int = blockgroup.astype({'GEOID10':"int64"}) # converting data types for merge
 blockgroup_int.dtypes
 blockgroup_pm25 = blockgroup_int.merge(pm25, left_on='GEOID10', right_on='fips')
+#blockgroup_pm25.dtypes
 
 # ---------- clip data with aoi
 parks_clip = parks.clip(aoi)
@@ -92,7 +93,10 @@ water303_clip.plot(ax=base,color="red")
 aoi.boundary.plot(ax=base,color="black")
 plt.show()
 
-blockgroup_pm25_clip.plot()
+# ------ plot air quality data with colors showing air quality
+blockgroup_pm25_clip.plot(column='pred_wght',legend='true',
+    legend_kwds={'label': "King County Population Weighted PM 2.5 ug/m3 in 2015",
+    'orientation': "horizontal"})
 plt.show()
 
 # intersect data layers. polygon of parks with envrionmental data
