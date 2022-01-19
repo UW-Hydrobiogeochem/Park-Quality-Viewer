@@ -12,7 +12,6 @@
 # code does run without those two lines, with just importing geopandas and reading data
 #$ python get-pip.py
 #pip install geopandas # not sure if I have to do this eash time or only once
-from turtle import title
 import geopandas as gpd
 import fiona
 import matplotlib.pyplot as plt
