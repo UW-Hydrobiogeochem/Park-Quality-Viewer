@@ -16,6 +16,7 @@ import geopandas as gpd
 import fiona
 import matplotlib.pyplot as plt
 import pandas as pd
+import rtree #needed for clipping in geopandas
 
 # ------ Import Data -----------------
 # polygons representing parks + environmental layer (grid?)
@@ -26,8 +27,8 @@ import pandas as pd
 # next step (jan 5): Becca practice import with smaller data. json file of King County parks that Spencer has al
 
 # King County Data
-parks = gpd.read_file("Data/Parks_in_King_County___park_area.geojson")
-water = gpd.read_file("Data/Open_water_for_King_County_and_portions_of_adjacent_counties___wtrbdy_area.geojson")
+parks = gpd.read_file("data/Parks_in_King_County___park_area.geojson")
+water = gpd.read_file("data/Open_water_for_King_County_and_portions_of_adjacent_counties___wtrbdy_area.geojson")
 
 # WA DEQ polluted water bodies
 fiona.listlayers("data/WQ_ENV_WQAssessmentCurrent.gdb")
@@ -38,7 +39,8 @@ fiona.listlayers("data/WQ_ENV_WQAssessmentCurrent.gdb")
 water303 = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',layer=2)
 
 # mask
-aoi = gpd.read_file("Data/aoi.geojson")
+aoi = gpd.read_file("data/King_County_Political_Boundary_(no_waterbodies)___kingco_area.geojson")    
+# aoi = gpd.read_file("Data/aoi.geojson")
 
 # census data shape file
 blockgroup = gpd.read_file("data/bg10/bg10.shp")
@@ -65,7 +67,7 @@ water.crs
 water303.crs
 aoi.crs
 blockgroup.crs
-# note: parks, water and aoi are <Geographic 2D CRS: EPSG:4326>
+# note: parks, water, aoi are <Geographic 2D CRS: EPSG:4326>
 # note: water303 is <Derived Projected CRS: EPSG:2927>
 # note: census block is in NAD83
 # convert water 303 data to same crs as parks county park and aoi
@@ -93,12 +95,6 @@ plt.show()
 blockgroup_pm25_clip.plot()
 plt.show()
 
-# Clip data to area of interest --> both layers
-# clip with a new polygon that is area of interest or bounding box of coordinates
-# geopandas.clip
-# https://geopandas.org/en/stable/docs/reference/api/geopandas.clip.html
-# mask has to be a vector file. Cannot be a bounding box. To use above function.
-
 # intersect data layers. polygon of parks with envrionmental data
 # geopandas.overlay
 # https://geopandas.org/en/stable/docs/reference/api/geopandas.clip.html
@@ -107,6 +103,7 @@ plt.show()
 # can work directly on attributes and ignore geometry. e.g. take mean of polygon
 # produce a new geofile to display
 # can probably do this with pandas...will operate on attributes of polygons
+# spatial joins
 
 # visualize results -- not clear what exactly.
 # map with park polygons color coded by environmental data measure?
