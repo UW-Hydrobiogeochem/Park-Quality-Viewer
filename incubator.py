@@ -7,27 +7,18 @@
 # Important to understand benefits and risks associated with existing and planned spaces for climate adaptation
 
 # Import Libraries
-# not sure what happened, but when re-ran code with 'pip install geopandas' got SyntaxError
-# tried downloading and installing pip. Didn't fix problem
-# code does run without those two lines, with just importing geopandas and reading data
 #$ python get-pip.py
 #pip install geopandas # not sure if I have to do this eash time or only once
 import geopandas as gpd
 import fiona
 import matplotlib.pyplot as plt
 import pandas as pd
-import rtree #needed for clipping in geopandas
+#import rtree #needed for clipping in geopandas
 
 # ------ Import Data -----------------
-# polygons representing parks + environmental layer (grid?)
-# ideally, enviornmental data is at higher resolution than park data
-# data will come in different projections --> will need to reconcile
-# geopandas.org for importing shapefiles
-# https://geopandas.org/en/stable/docs/user_guide/io.html
-# next step (jan 5): Becca practice import with smaller data. json file of King County parks that Spencer has al
 
 # King County Data
-parks = gpd.read_file("data/Parks_in_King_County___park_area.geojson")
+parks = gpd.read_file("data/Parks_in_King_County___park_area.geojson") # confirmed only polygons in this file
 water = gpd.read_file("data/Open_water_for_King_County_and_portions_of_adjacent_counties___wtrbdy_area.geojson")
 
 # WA DEQ polluted water bodies
@@ -38,18 +29,15 @@ fiona.listlayers("data/WQ_ENV_WQAssessmentCurrent.gdb")
 #  'WQ_ENV_WQAssessmentCurrent_WQACurrent305b']
 water303 = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',layer=2)
 
-# mask
+# Area of interest
 aoi = gpd.read_file("data/King_County_Political_Boundary_(no_waterbodies)___kingco_area.geojson")    
 # aoi = gpd.read_file("Data/aoi.geojson")
 
 # census data shape file
 blockgroup = gpd.read_file("data/bg10/bg10.shp")
-# to do -- clip out area of interest and save a new shp file for working in project
-blockgroup.dtypes
 
 # air quality data
 pm25 = pd.read_csv("data/CACES_PM25_2015_censusblock.csv")
-pm25.dtypes
 # to connect with air quality data. Do a merge of the data sets using a code, fips key
 
 # Inspect Data
@@ -61,27 +49,32 @@ aoi.head()
 pm25.head()
 blockgroup.head()
 
-# ---------- align projections
+# ---------- align projections ------
+# need to chose crs that is projected to make area calculations
+# going with EPSG 2927, Unit: US survey foot
 parks.crs
 water.crs
 water303.crs
 aoi.crs
 blockgroup.crs
-# note: parks, water, aoi are <Geographic 2D CRS: EPSG:4326>
+# note: king country parks Projection: State Plane* 
+#       Zone: 5601  (Washington State Plane North; FIPS Zone 4601) Datum: HPGN Units: feet
+# note: parks, water, aoi are <Geographic 2D CRS: EPSG:4326> according to crs command
 # note: water303 is <Derived Projected CRS: EPSG:2927>
 # note: census block is in NAD83
-# convert water 303 data to same crs as parks county park and aoi
-water303 = water303.to_crs(4326)
-blockgroup = blockgroup.to_crs(4326)
+parks = parks.to_crs(2927)
+water = water.to_crs(2927)
+aoi = aoi.to_crs(2927)
+blockgroup = blockgroup.to_crs(2927)
+# crs conversion does not change data values. only changes geometries
 
-# ------- merge air quality data with block group data
+# ------- merge air quality data with census block group data
 blockgroup_int = blockgroup.astype({'GEOID10':"int64"}) # converting data types for merge
-blockgroup_int.dtypes
 blockgroup_pm25 = blockgroup_int.merge(pm25, left_on='GEOID10', right_on='fips')
-#blockgroup_pm25.dtypes
 
 # ---------- clip data with aoi
-parks_clip = parks.clip(aoi)
+#parks_clip = parks.clip(aoi)
+parks_clip = parks # getting error when clipping, skip clip for now
 water_clip = water.clip(aoi)
 water303_clip = water303.clip(aoi)
 blockgroup_pm25_clip = blockgroup_pm25.clip(aoi)
@@ -99,9 +92,37 @@ blockgroup_pm25_clip.plot(column='pred_wght',legend='true',
     'orientation': "horizontal"})
 plt.show()
 
-# intersect data layers. polygon of parks with envrionmental data
-# geopandas.overlay
-# https://geopandas.org/en/stable/docs/reference/api/geopandas.clip.html
+# -------- intersect data layers to get environmental data at each park
+# result = polygon of parks with envrionmental data
+air_park_intersect = parks_clip.overlay(blockgroup_pm25_clip,how='intersection')
+# note: check on this later : UserWarning: `keep_geom_type=True` in overlay resulted 
+# in 1 dropped geometries of different geometry types than df1 has. 
+# Set `keep_geom_type=False` to retain all geometries return geopandas.overlay(
+air_park_intersect.dtypes
+parks_clip['OBJECTID'].is_unique # true = ID is applied to each park
+air_park_intersect['OBJECTID'].is_unique # false = parks have multiple air quality data
+air_park_intersect['SHAPE_Area'].is_unique # shape area is just the value of whole park carried forward
+
+# ------------calculated area-averaged values for enviornmental data for each park
+# example: (A1*E1 + A2*E2)/(A1+A2)
+# find area of intersections and join to the intersect object
+air_park_intersect = air_park_intersect.join(air_park_intersect.area.to_frame(name='intersect_Area'))
+air_park_intersect.dtypes
+# multiply interesect area by pm25 value for that area
+pm25area = air_park_intersect['intersect_Area'] * air_park_intersect['pred_wght']
+# join this multiplied value to the intersect object
+air_park_intersect = air_park_intersect.join(pm25area.to_frame(name='pm25area'))
+# sum the multiplied values that exist within a given park and append to a new park object
+air_park_intersect_pm25areasum = air_park_intersect.groupby('OBJECTID')['pm25area'].sum()
+parks_environ = parks_clip.merge(air_park_intersect_pm25areasum,left_on='OBJECTID', right_on='OBJECTID')
+# divide sum of multiplied values by park area to get area weighted average
+pm25areaAvg = parks_environ['pm25area'].divide(parks_environ['SHAPE_Area'])
+parks_environ = parks_environ.join(pm25areaAvg.to_frame(name='pm25areaAvg'))
+# visualize data in a plot
+parks_environ.plot(column='pm25areaAvg',legend='true',
+    legend_kwds={'label': "Park Area-Weighted PM 2.5 ug/m3 in 2015",
+    'orientation': "horizontal"})
+plt.show()
 
 # summarize environmental data by park
 # can work directly on attributes and ignore geometry. e.g. take mean of polygon
