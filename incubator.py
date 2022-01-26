@@ -40,7 +40,8 @@ block = gpd.read_file("data/block10/block10.shp")
 # air quality data
 # pm25 = pd.read_csv("data/CACES_PM25_2015_censusblock.csv")
 pm25 = pd.read_csv("data/pm25block_wa_2015.csv")
-pm25.dtypes
+# pm25.dtypes
+no2 = pd.read_csv("data/no2block_wa_2015.csv")
 # to connect with air quality data. Do a merge of the data sets using a code, fips key
 
 # Inspect Data
@@ -75,6 +76,7 @@ block = block.to_crs(2927)
 block_int = block.astype({'GEOID10':"int64"}) # converting data types for merge
 block_int.dtypes
 block_pm25 = block_int.merge(pm25, left_on='GEOID10', right_on='block_fip')
+block_no2 = block_int.merge(no2, left_on='GEOID10', right_on='block_fip')
 
 # ---------- clip data with aoi
 #parks_clip = parks.clip(aoi)
@@ -82,6 +84,7 @@ parks_clip = parks # getting error when clipping, skip clip for now
 water_clip = water.clip(aoi)
 water303_clip = water303.clip(aoi)
 block_pm25_clip = block_pm25.clip(aoi)
+block_no2_clip = block_no2.clip(aoi)
 
 # ----------- make a plot 
 base = parks_clip.plot(color="green")
@@ -90,7 +93,7 @@ water303_clip.plot(ax=base,color="red")
 aoi.boundary.plot(ax=base,color="black")
 plt.show()
 
-# ------ plot air quality data with colors showing air quality
+# ------ plot pm25 quality data with colors showing air quality
 block_pm25_clip.plot(column='pred15',legend='true',
     legend_kwds={'label': "King County PM 2.5 ug/m3 in 2015",
     'orientation': "horizontal"})
@@ -100,29 +103,47 @@ plt.show()
 # result = polygon of parks with envrionmental data
 pm25_park_intersect = parks_clip.overlay(block_pm25_clip,how='intersection')
 pm25_park_intersect.dtypes
-parks_clip['OBJECTID'].is_unique # true = ID is applied to each park
-pm25_park_intersect['OBJECTID'].is_unique # false = parks have multiple air quality data
-parks_clip['SHAPE_Area'].is_unique # true
-pm25_park_intersect['SHAPE_Area'].is_unique # false...shape area is just the value of whole park carried forward
+# parks_clip['OBJECTID'].is_unique # true = ID is applied to each park
+# pm25_park_intersect['OBJECTID'].is_unique # false = parks have multiple air quality data
+# parks_clip['SHAPE_Area'].is_unique # true
+# pm25_park_intersect['SHAPE_Area'].is_unique # false...shape area is just the value of whole park carried forward
+no2_park_intersect = parks_clip.overlay(block_no2_clip,how='intersection')
 
 # ------------calculated area-averaged values for enviornmental data for each park
 # example: (A1*E1 + A2*E2)/(A1+A2)
-# find area of intersections and join to the intersect object
+# find area of each intersection and join to the intersect object
 pm25_park_intersect = pm25_park_intersect.join(pm25_park_intersect.area.to_frame(name='intersect_Area'))
-pm25_park_intersect.dtypes
-# multiply interesect area by pm25 value for that area
+# pm25_park_intersect.dtypes
+no2_park_intersect = no2_park_intersect.join(no2_park_intersect.area.to_frame(name='intersect_Area'))
+
+# multiply interesect area by air quality value for that area
 pm25area = pm25_park_intersect['intersect_Area'] * pm25_park_intersect['pred15']
+no2area = no2_park_intersect['intersect_Area'] * no2_park_intersect['pred15']
+
 # join this multiplied value to the intersect object
 pm25_park_intersect = pm25_park_intersect.join(pm25area.to_frame(name='pm25area'))
+no2_park_intersect = no2_park_intersect.join(no2area.to_frame(name='no2area'))
+
 # sum the multiplied values that exist within a given park and append to a new park object
-pm25_park_intersect_pm25areasum = pm25_park_intersect.groupby('OBJECTID')['pm25area'].sum()
-parks_environ = parks_clip.merge(pm25_park_intersect_pm25areasum,left_on='OBJECTID', right_on='OBJECTID')
-# divide sum of multiplied values by park area to get area weighted average
-pm25areaAvg = parks_environ['pm25area'].divide(parks_environ['SHAPE_Area'])
-parks_environ = parks_environ.join(pm25areaAvg.to_frame(name='pm25areaAvg'))
+pm25_park_areasum = pm25_park_intersect.groupby('OBJECTID')['pm25area'].sum()
+no2_park_areasum = no2_park_intersect.groupby('OBJECTID')['no2area'].sum()
+pm25_park = parks_clip.merge(pm25_park_areasum,left_on='OBJECTID', right_on='OBJECTID')
+no2_park = parks_clip.merge(no2_park_areasum,left_on='OBJECTID', right_on='OBJECTID')
+# divide sum of multiplied values by total park area to get area weighted average
+pm25areaAvg = pm25_park['pm25area'].divide(pm25_park['SHAPE_Area'])
+no2areaAvg = no2_park['no2area'].divide(no2_park['SHAPE_Area'])
+# append area weighted averages to a new park object
+parks_environ = parks_clip.join(pm25areaAvg.to_frame(name='pm25areaAvg'))
+parks_environ = parks_environ.join(no2areaAvg.to_frame(name='no2areaAvg'))
+
 # visualize data in a plot
 parks_environ.plot(column='pm25areaAvg',legend='true',
     legend_kwds={'label': "Park Area-Weighted PM 2.5 ug/m3 in 2015",
+    'orientation': "horizontal"})
+plt.show()
+
+parks_environ.plot(column='no2areaAvg',legend='true',
+    legend_kwds={'label': "Park Area-Weighted no2 in 2015",
     'orientation': "horizontal"})
 plt.show()
 
