@@ -34,10 +34,13 @@ aoi = gpd.read_file("data/King_County_Political_Boundary_(no_waterbodies)___king
 # aoi = gpd.read_file("Data/aoi.geojson")
 
 # census data shape file
-blockgroup = gpd.read_file("data/bg10/bg10.shp")
+# blockgroup = gpd.read_file("data/bg10/bg10.shp")
+block = gpd.read_file("data/block10/block10.shp")
 
 # air quality data
-pm25 = pd.read_csv("data/CACES_PM25_2015_censusblock.csv")
+# pm25 = pd.read_csv("data/CACES_PM25_2015_censusblock.csv")
+pm25 = pd.read_csv("data/pm25block_wa_2015.csv")
+pm25.dtypes
 # to connect with air quality data. Do a merge of the data sets using a code, fips key
 
 # Inspect Data
@@ -47,7 +50,7 @@ water.head()
 water303.head()
 aoi.head()
 pm25.head()
-blockgroup.head()
+block.head()
 
 # ---------- align projections ------
 # need to chose crs that is projected to make area calculations
@@ -56,7 +59,7 @@ parks.crs
 water.crs
 water303.crs
 aoi.crs
-blockgroup.crs
+block.crs
 # note: king country parks Projection: State Plane* 
 #       Zone: 5601  (Washington State Plane North; FIPS Zone 4601) Datum: HPGN Units: feet
 # note: parks, water, aoi are <Geographic 2D CRS: EPSG:4326> according to crs command
@@ -65,19 +68,20 @@ blockgroup.crs
 parks = parks.to_crs(2927)
 water = water.to_crs(2927)
 aoi = aoi.to_crs(2927)
-blockgroup = blockgroup.to_crs(2927)
+block = block.to_crs(2927)
 # crs conversion does not change data values. only changes geometries
 
 # ------- merge air quality data with census block group data
-blockgroup_int = blockgroup.astype({'GEOID10':"int64"}) # converting data types for merge
-blockgroup_pm25 = blockgroup_int.merge(pm25, left_on='GEOID10', right_on='fips')
+block_int = block.astype({'GEOID10':"int64"}) # converting data types for merge
+block_int.dtypes
+block_pm25 = block_int.merge(pm25, left_on='GEOID10', right_on='block_fip')
 
 # ---------- clip data with aoi
 #parks_clip = parks.clip(aoi)
 parks_clip = parks # getting error when clipping, skip clip for now
 water_clip = water.clip(aoi)
 water303_clip = water303.clip(aoi)
-blockgroup_pm25_clip = blockgroup_pm25.clip(aoi)
+block_pm25_clip = block_pm25.clip(aoi)
 
 # ----------- make a plot 
 base = parks_clip.plot(color="green")
@@ -87,34 +91,32 @@ aoi.boundary.plot(ax=base,color="black")
 plt.show()
 
 # ------ plot air quality data with colors showing air quality
-blockgroup_pm25_clip.plot(column='pred_wght',legend='true',
-    legend_kwds={'label': "King County Population Weighted PM 2.5 ug/m3 in 2015",
+block_pm25_clip.plot(column='pred15',legend='true',
+    legend_kwds={'label': "King County PM 2.5 ug/m3 in 2015",
     'orientation': "horizontal"})
 plt.show()
 
 # -------- intersect data layers to get environmental data at each park
 # result = polygon of parks with envrionmental data
-air_park_intersect = parks_clip.overlay(blockgroup_pm25_clip,how='intersection')
-# note: check on this later : UserWarning: `keep_geom_type=True` in overlay resulted 
-# in 1 dropped geometries of different geometry types than df1 has. 
-# Set `keep_geom_type=False` to retain all geometries return geopandas.overlay(
-air_park_intersect.dtypes
+pm25_park_intersect = parks_clip.overlay(block_pm25_clip,how='intersection')
+pm25_park_intersect.dtypes
 parks_clip['OBJECTID'].is_unique # true = ID is applied to each park
-air_park_intersect['OBJECTID'].is_unique # false = parks have multiple air quality data
-air_park_intersect['SHAPE_Area'].is_unique # shape area is just the value of whole park carried forward
+pm25_park_intersect['OBJECTID'].is_unique # false = parks have multiple air quality data
+parks_clip['SHAPE_Area'].is_unique # true
+pm25_park_intersect['SHAPE_Area'].is_unique # false...shape area is just the value of whole park carried forward
 
 # ------------calculated area-averaged values for enviornmental data for each park
 # example: (A1*E1 + A2*E2)/(A1+A2)
 # find area of intersections and join to the intersect object
-air_park_intersect = air_park_intersect.join(air_park_intersect.area.to_frame(name='intersect_Area'))
-air_park_intersect.dtypes
+pm25_park_intersect = pm25_park_intersect.join(pm25_park_intersect.area.to_frame(name='intersect_Area'))
+pm25_park_intersect.dtypes
 # multiply interesect area by pm25 value for that area
-pm25area = air_park_intersect['intersect_Area'] * air_park_intersect['pred_wght']
+pm25area = pm25_park_intersect['intersect_Area'] * pm25_park_intersect['pred15']
 # join this multiplied value to the intersect object
-air_park_intersect = air_park_intersect.join(pm25area.to_frame(name='pm25area'))
+pm25_park_intersect = pm25_park_intersect.join(pm25area.to_frame(name='pm25area'))
 # sum the multiplied values that exist within a given park and append to a new park object
-air_park_intersect_pm25areasum = air_park_intersect.groupby('OBJECTID')['pm25area'].sum()
-parks_environ = parks_clip.merge(air_park_intersect_pm25areasum,left_on='OBJECTID', right_on='OBJECTID')
+pm25_park_intersect_pm25areasum = pm25_park_intersect.groupby('OBJECTID')['pm25area'].sum()
+parks_environ = parks_clip.merge(pm25_park_intersect_pm25areasum,left_on='OBJECTID', right_on='OBJECTID')
 # divide sum of multiplied values by park area to get area weighted average
 pm25areaAvg = parks_environ['pm25area'].divide(parks_environ['SHAPE_Area'])
 parks_environ = parks_environ.join(pm25areaAvg.to_frame(name='pm25areaAvg'))
