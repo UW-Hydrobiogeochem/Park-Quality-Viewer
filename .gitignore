@@ -1,6 +1,8 @@
 
 # Don't push any of these files to the repo
 data/
+outputs/
+*.html
 
 .DS_Store
 
