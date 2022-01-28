@@ -3,6 +3,7 @@
 data/
 outputs/
 *.html
+*.ipynb
 
 .DS_Store
 
