@@ -31,9 +31,9 @@ fiona.listlayers("data/WQ_ENV_WQAssessmentCurrent.gdb")
 #  'WQ_ENV_WQAssessmentCurrent_WQACurrent303d',
 #  'WQ_ENV_WQAssessmentCurrent_WQACurrent305b']
 water305Assess = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',layer=0)
-water303Assess = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',layer=1)
-water303 = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',layer=2)
-water305 = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',layer=3)
+# water303Assess = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',layer=1)
+# water303 = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',layer=2)
+# water305 = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',layer=3)
 # ListingNumber                int64
 # CategoryCode                object
 # ParameterName               object
@@ -50,6 +50,11 @@ water305 = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',
 # Shape_Length               float64
 # Shape_Area                 float64
 # water305Assess.groupby('CategoryCode').groups.keys() #'1', '2', '4A', '4B', '4C', '5'
+# 1 = meets tested standards for clean water
+# 2 = water of concern
+# 3 = insufficient data
+# 4 = impaired water that does not require a TMDL (total maximum daily loads)
+# 5 = polluted water that requires a water improvement project
 # water303Assess.groupby('CategoryCode').groups.keys() # 5
 # water305.groupby('CategoryCode').groups.keys() # '1', '2', '4A', '4B', '4C', '5'
 # water303.groupby('CategoryCode').groups.keys() # 5
@@ -58,6 +63,12 @@ water305 = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='FileGDB',
 # water305Assess.groupby('MediumName').groups.keys() # ['Habitat', 'Other', 'Sediment', 'Tissue', 'Water']
 # water305Assess.groupby('EnvironmentTypeCode').groups.keys() # ['Freshwater', 'Marine']
 # ----- using water305Assess becuase I think this is the more recent data than water 305
+
+# zonal statistics of water quality data
+# buffer the park and look for water quality data within that buffer.
+# this would work for shoreline park. But could catch a tiny lake that is not connected to park
+# test this to make sure the park and water body are connected to avoid mis-assignment
+# could compare to WQ database and king county water layer - both
 
 # --------census data shape file
 # blockgroup = gpd.read_file("data/bg10/bg10.shp")
@@ -93,43 +104,99 @@ block = block.to_crs(2927)
 #####################################################
 # ---------- Align, filter, merge, clip data  ------
 #####################################################
+# ---------- clip data with aoi
+#parks_clip = parks.clip(aoi)
+parks_clip = parks # getting error when clipping, skip clip for now
+water_clip = water.clip(aoi)
+water305Assess_clip = water305Assess.clip(aoi)
 
 # ---------- filter water quality data:
-# CategoryCode = 4A, 4B, 4C or 5
+# CategoryCode = 2, 4A, 4B, 4C or 5
 # ParamterName = toxic list
 # MediumName = water
 # EnvironmentTypeCode = freshwater
-water305Assess_temp = water305Assess[(water305Assess['MediumName']=='Water')&
-    (water305Assess['EnvironmentTypeCode']=='Freshwater')&
-    ((water305Assess['CategoryCode']=='4A')|(water305Assess['CategoryCode']=='4B')|
-    (water305Assess['CategoryCode']=='4C')|(water305Assess['CategoryCode']=='5'))]
-water305Assess_temp.groupby('ParameterName').groups.keys()
-# ["4,4'-DDD", "4,4'-DDE", "4,4'-DDT", 'Aldrin', 'Aldrin/Dieldrin', 'Ammonia-N', 
-# 'Arsenic', 'Bacteria', 'Chloride', 'Chlorine', 'Chlorpyrifos', 'Copper', 
-# 'DDT (and metabolites)', 'Diazinon', 'Dieldrin', 'Dioxin', 'Dissolved Oxygen', 
-# 'Endosulfan', 'Fish And Shellfish Habitat', 'Hexachlorobenzene', 'Instream Flow', 
-# 'Invasive Exotic Species', 'Lead', 'Mercury', 'Silver', 'Temperature', 'Total Dissolved Gas', 
-# 'Total Nitrogen', 'Total Phosphorus', 'Turbidity', 'Water Column Bioassay', 'Zinc', 'pH']
-toxic = ["4,4'-DDD", "4,4'-DDE", "4,4'-DDT", 'Aldrin', 'Aldrin/Dieldrin',  
-    'Arsenic', 'Bacteria', 'Chlorpyrifos', 'DDT (and metabolites)', 'Diazinon', 
-    'Dieldrin', 'Dioxin', 'Endosulfan', 'Hexachlorobenzene', 'Lead', 'Mercury', 'Silver']
-water305Assess_toxic_water = water305Assess_temp[water305Assess_temp.ParameterName.isin(toxic)]
-# CategoryCode = 4A, 4B, 4C or 5
+water305Assess_water = water305Assess[(water305Assess['MediumName']=='Water')&
+    ((water305Assess['CategoryCode']=='2')|(water305Assess['CategoryCode']=='4A')|
+    (water305Assess['CategoryCode']=='4B')| (water305Assess['CategoryCode']=='4C')|
+    (water305Assess['CategoryCode']=='5'))]
+water305Assess_water.groupby('ParameterName').groups.keys()
+# ["3,3'-Dichlorobenzidine", "4,4'-DDD", "4,4'-DDE", "4,4'-DDT", 'Aldrin', 
+# 'Aldrin/Dieldrin', 'Alpha-BHC', 'Aluminum', 'Ammonia-N', 'Arsenic', 
+# 'Bacteria', 'Benzene', 'Benzo(a)pyrene', 'Benzo(b)fluoranthene', 
+# 'Bis(2-Ethylhexyl)phthalate', 'Cadmium', 'Carbaryl', 'Chlordane', 
+# 'Chloride', 'Chlorine', 'Chlorothalonil', 'Chlorpyrifos', 'Chromium', 
+# 'Chrysene', 'Copper', 'DDT (and metabolites)', 'Diazinon', 'Dieldrin', 
+# 'Dioxin', 'Dissolved Oxygen', 'Endosulfan', 'Endrin', 'Fish And Shellfish Habitat', 
+# 'Gamma-bhc (Lindane)', 'Heptachlor', 'Heptachlor Epoxide', 'Hexachlorobenzene', 
+# 'Hexachlorocyclohexane (Lindane)', 'Indeno(1,2,3-c,d)pyrene', 'Instream Flow', 
+# 'Invasive Exotic Species', 'Lead', 'Malathion', 'Mercury', 'Parathion', 
+# 'Pentachlorophenol', 'Polychlorinated Biphenyls (PCBs)', 'Silver', 'Temperature', 
+# 'Tetrachloroethylene', 'Thallium', 'Total Dissolved Gas', 'Total Nitrogen', 
+# 'Total Phosphorus', 'Toxaphene', 'Trichloroethylene', 'Turbidity', 
+# 'Water Column Bioassay', 'Zinc', 'pH']
+toxic = ["3,3'-Dichlorobenzidine", "4,4'-DDD", "4,4'-DDE", "4,4'-DDT", 'Aldrin', 
+    'Aldrin/Dieldrin', 'Alpha-BHC', 'Aluminum',  'Arsenic', 
+    'Bacteria', 'Benzene', 'Benzo(a)pyrene', 'Benzo(b)fluoranthene', 
+    'Bis(2-Ethylhexyl)phthalate', 'Cadmium', 'Carbaryl', 'Chlordane', 
+    'Chlorothalonil', 'Chlorpyrifos', 'Chromium', 
+    'Chrysene', 'DDT (and metabolites)', 'Diazinon', 'Dieldrin', 
+    'Dioxin',  'Endosulfan', 'Endrin',  
+    'Gamma-bhc (Lindane)', 'Heptachlor', 'Heptachlor Epoxide', 'Hexachlorobenzene', 
+    'Hexachlorocyclohexane (Lindane)', 'Indeno(1,2,3-c,d)pyrene',  
+    'Lead', 'Malathion', 'Mercury', 'Parathion', 
+    'Pentachlorophenol', 'Polychlorinated Biphenyls (PCBs)', 'Silver', 
+    'Tetrachloroethylene', 'Thallium', 'Toxaphene', 'Trichloroethylene']
+water305Assess_water_toxic = water305Assess_water[water305Assess_water.ParameterName.isin(toxic)]
+# CategoryCode = 2, 4A, 4B, 4C or 5
 # ParamterName = toxic list
 # MediumName = tissue
 # EnvironmentTypeCode = freshwater
-water305Assess_temp = water305Assess[(water305Assess['MediumName']=='Tissue')&
-    (water305Assess['EnvironmentTypeCode']=='Freshwater')&
-    ((water305Assess['CategoryCode']=='4A')|(water305Assess['CategoryCode']=='4B')|
-    (water305Assess['CategoryCode']=='4C')|(water305Assess['CategoryCode']=='5'))]
-water305Assess_temp.groupby('ParameterName').groups.keys()
-# ['2,3,7,8-TCDD (Dioxin)', '2,3,7,8-TCDD TEQ', "4,4'-DDD", "4,4'-DDE", "4,4'-DDT", 
-# 'Aldrin', 'Alpha-BHC', 'Arsenic, Inorganic', 'Chlordane', 'DDT (and metabolites)', 
-# 'Dieldrin', 'Dioxin', 'Heptachlor Epoxide', 'Hexachlorobenzene', 'Mercury', 
-# 'Polychlorinated Biphenyls (PCBs)', 'Total Chlordane', 'Toxaphene']
+water305Assess_tissue = water305Assess[(water305Assess['MediumName']=='Tissue')&
+    ((water305Assess['CategoryCode']=='2')|(water305Assess['CategoryCode']=='4A')|
+    (water305Assess['CategoryCode']=='4B')|(water305Assess['CategoryCode']=='4C')|
+    (water305Assess['CategoryCode']=='5'))]
+water305Assess_tissue.groupby('ParameterName').groups.keys()
+#['2,3,7,8-TCDD (Dioxin)', '2,3,7,8-TCDD TEQ', "4,4'-DDD", "4,4'-DDE", "4,4'-DDT", 
+# 'Aldrin', 'Alpha-BHC', 'Arsenic', 'Arsenic, Inorganic', 'Benzo(a)anthracene', 
+# 'Benzo(a)pyrene', 'Benzo(b)fluoranthene', 'Benzo(k)fluoranthene', 'Beta-BHC', 
+# 'Bis(2-Ethylhexyl)phthalate', 'Chlordane', 'Chlorinated Pesticides', 'Chrysene', 
+# 'DDT (and metabolites)', 'Dibenzo(a,h)anthracene', 'Dieldrin', 'Dioxin', 'Heptachlor Epoxide', 
+# 'Hexachlorobenzene', 'High Molecular Weight Polycyclic Aromatic Hydrocarbons (HPAH)', 
+# 'Indeno(1,2,3-c,d)pyrene', 'Mercury', 'Polychlorinated Biphenyls (PCBs)', 'Total Chlordane', 
+# 'Total Dioxins', 'Total Furans', 'Toxaphene']
 # all these chemicals are toxic
-water305Assess_toxic_tissue = water305Assess_temp
-# note: sediment data are not for chemicals. Just say assays were conducted.
+water305Assess_sediment = water305Assess[(water305Assess['MediumName']=='Sediment')&
+    ((water305Assess['CategoryCode']=='2')|(water305Assess['CategoryCode']=='4A')|
+    (water305Assess['CategoryCode']=='4B')|(water305Assess['CategoryCode']=='4C')|
+    (water305Assess['CategoryCode']=='5'))]
+water305Assess_sediment.groupby('ParameterName').groups.keys()
+#['1,2,4-Trichlorobenzene', '1,2-Dichlorobenzene', '1,4-Dichlorobenzene', '2,4-Dimethylphenol', 
+# '2-Methylnaphthalene', '2-Methylphenol', '4-Methylphenol', 'Acenaphthene', 'Acenaphthylene', 
+# 'Anthracene', 'Arsenic', 'Benzo(a)anthracene', 'Benzo(a)pyrene', 'Benzo(g,h,i)perylene', 
+# 'Benzofluoranthenes, Total (b+k+j)', 'Benzoic Acid', 'Benzyl Alcohol', 'Bis(2-Ethylhexyl)phthalate', 
+# 'Butyl benzyl phthalate', 'Cadmium', 'Chromium', 'Chrysene', 'Copper', 'Di-n-Octyl phthalate', 
+# 'Di-n-butyl phthalate', 'Dibenzo(a,h)anthracene', 'Dibenzofuran', 'Diethyl phthalate', 
+# 'Dimethyl phthalate', 'Fluoranthene', 'Fluorene', 'Hexachlorobenzene', 'Hexachlorobutadiene', 
+# 'High Molecular Weight Polycyclic Aromatic Hydrocarbons (HPAH)', 'Indeno(1,2,3-c,d)pyrene', 
+# 'Lead', 'Low Molecular Weight Polycyclic Aromatic Hydrocarbons (LPAH)', 'Mercury', 'N-Nitrosodiphenylamine', 
+# 'Naphthalene', 'Pentachlorophenol', 'Phenanthrene', 'Phenol', 'Polychlorinated Biphenyls (PCBs)', 
+# 'Pyrene', 'Sediment Bioassay', 'Silver', 'Zinc']
+water305Assess_habitat = water305Assess[(water305Assess['MediumName']=='Habitat')&
+    ((water305Assess['CategoryCode']=='2')|(water305Assess['CategoryCode']=='4A')|
+    (water305Assess['CategoryCode']=='4B')|(water305Assess['CategoryCode']=='4C')|
+    (water305Assess['CategoryCode']=='5'))]
+water305Assess_habitat.groupby('ParameterName').groups.keys()
+# ['Coarse Sediment', 'Fine Sediment', 'Fish And Shellfish Habitat', 'Instream Flow', 
+# 'Invasive Exotic Species', 'Large Woody Debris']
+water305Assess_other = water305Assess[(water305Assess['MediumName']=='Other')&
+    ((water305Assess['CategoryCode']=='2')|(water305Assess['CategoryCode']=='4A')|
+    (water305Assess['CategoryCode']=='4B')|(water305Assess['CategoryCode']=='4C')|
+    (water305Assess['CategoryCode']=='5'))]
+water305Assess_other.groupby('ParameterName').groups.keys()
+# ['Bioassessment']
+
+water305Assess_clean = water305Assess[(water305Assess['CategoryCode']=='1')]
+water305Assess_unknown = water305Assess[(water305Assess['CategoryCode']=='3')]
 
 # ------- merge air quality data with census block group data
 block_int = block.astype({'GEOID10':"int64"}) # converting data types for merge
@@ -138,11 +205,6 @@ block_pm25 = block_int.merge(pm25, left_on='GEOID10', right_on='block_fip')
 block_no2 = block_int.merge(no2, left_on='GEOID10', right_on='block_fip')
 
 # ---------- clip data with aoi
-#parks_clip = parks.clip(aoi)
-parks_clip = parks # getting error when clipping, skip clip for now
-water_clip = water.clip(aoi)
-water305Assess_toxic_water_clip = water305Assess_toxic_water.clip(aoi)
-water305Assess_toxic_tissue_clip = water305Assess_toxic_tissue.clip(aoi)
 block_pm25_clip = block_pm25.clip(aoi)
 block_no2_clip = block_no2.clip(aoi)
 
@@ -162,6 +224,19 @@ plt.show()
 block_pm25_clip.plot(column='pred15',legend='true',
     legend_kwds={'label': "King County PM 2.5 ug/m3 in 2015",
     'orientation': "horizontal"})
+plt.show()
+
+# ------- plot of all water quality data
+water305Assess_clip = water305Assess.clip(aoi)
+base = parks_clip.plot(color="grey")
+water_clip.plot(ax=base,color="black")
+water305Assess_clip.plot(ax=base,column='CategoryCode',legend='true')
+plt.show()
+
+# --------- plot of toxic water locations
+water305Assess_toxic_water_clip.plot(ax=base,color="red")
+water305Assess_toxic_tissue_clip.plot(ax=base,color="orange")
+aoi.boundary.plot(ax=base,color="black")
 plt.show()
 
 ########################################################################
