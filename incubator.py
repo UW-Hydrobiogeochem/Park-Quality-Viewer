@@ -68,11 +68,12 @@ water305Assess = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='Fil
 # assessmentUnitNumber says 'No Mappable Feature'
 water305Assess_clean = water305Assess[water305Assess['AssessmentUnitNumber'].str.contains('No Mappable Feature')== False]
 # shape: (27762, 16)
-
+water305Assess_clean['CatCodeNum'] = [int(w[0]) for w in water305Assess_clean.CategoryCode]
+# NOTE: gives a warning, but seems to work. So keeping it.
 # convert codes into numbers that can operate on late in code. store in the dataframe
-water305Assess_clean_num = water305Assess_clean.copy()
-water305Assess_clean_num['CatCodeNum'] = None
-water305Assess_clean_num.loc[:,'CatCodeNum'] = [int(w[0]) for w in water305Assess_clean.CategoryCode]
+# water305Assess_clean_num = water305Assess_clean.copy()
+# water305Assess_clean_num['CatCodeNum'] = None
+# water305Assess_clean_num.loc[:,'CatCodeNum'] = [int(w[0]) for w in water305Assess_clean.CategoryCode]
 # shape: (27762, 17)
 
 # --------census data shape file
@@ -113,7 +114,7 @@ block = block.to_crs(2927)
 #parks_clip = parks.clip(aoi)
 parks_clip = parks # getting error when clipping, skip clip for now
 water_clip = water.clip(aoi)
-water305Assess_clip = water305Assess_clean_num.clip(aoi) #NOTE:using the dataframe with numerical codes
+water305Assess_clip = water305Assess_clean.clip(aoi) 
 
 # ------- merge air quality data with census block group data
 block_int = block.astype({'GEOID10':"int64"}) # converting data types for merge
@@ -153,24 +154,38 @@ plt.show()
 # -------- intersect data layers to get environmental data at each park
 ########################################################################
 
+# create a new dataframe called parks_environ that holds all the enviornmental data about each park
+parks_environ = parks_clip.copy()
+
 # ---------------------------
 # ------- water quality data
 # ---------------------------
+parks_environ['WQ'] = None # create column to hold WQ data
 # plan: buffer parks by small amount. find intersection with King County water or WEQ water
 # if intersects with WEQ water ... assign the park the highest score of any intersected data
 # if intersects with King County water but not WEQ ... assign it a park with unkonwn quality
 # if intersects with neither .. assign it a park with no water
-parks_clip_buffer_series = parks_clip.buffer(100) # in units of feet / Geoseries
-# NOTE: when do the buffer, we lose the other information in the park data frame. We only retain the geometry.
-# this means that when we try to move forward with groupby operations, there is not information there
-# NOTE: next step = figure out what to do with the buffer series. The converting it to a geodataframe below does not solve our problems
-parks_clip_buffer = gpd.GeoDataFrame(geometry=parks_clip_buffer_series) # geo dataframe, needed for intersection
+# when do the buffer, we lose the other information in the park data frame. We only retain the geometry.
+parks_clip_buffer = parks_clip.copy() # had to use copy function in order to not affect parks_clip dataframe (not sure why)
+parks_clip_buffer.geometry = parks_clip.buffer(200)# in units of feet / Geoseries
+
 # base = water305Assess_clip.plot(column='CategoryCode',legend='true')
 # parks_clip_buffer.plot(ax=base,color='grey') 
 # parks_clip.plot(ax=base, color='black')
 # plt.show()
-WQ_park_intersect = parks_clip_buffer.overlay(water305Assess_clip,how='intersection') #shape: (3764, 17)
-# WQ_park_intersect.groupby('OBJECTID')['CatCodeNum'].max() # doesn't currently work!
+
+WQ_park_intersect = parks_clip_buffer.overlay(water305Assess_clip,how='intersection') #shape: (4203, 30)
+WQ_park_intersect_max = WQ_park_intersect.groupby('OBJECTID')['CatCodeNum'].max() #len = 455
+parks_environ = parks_environ.merge(WQ_park_intersect_max, left_on='OBJECTID', right_on='OBJECTID')
+# TODO: might not be appropriate to assign big parks to one WQ value
+
+water_park_intersect = parks_clip_buffer.overlay(water_clip,how='intersection')
+water_park_intersect_size = water_park_intersect.groupby('OBJECTID_1')['OBJECTID_2'].size()
+parks_environ['WaterPark'] = parks_environ.merge(water_park_intersect_grp,left_on='OBJECTID',right_on='OBJECTID_1')
+
+base = parks_clip.plot(color='black') 
+parks_environ.plot(ax=base, column='CatCodeNum',legend='true')
+plt.show()
 
 # pull categories out and convert to numeric categories, then take max.
 # left join with parks on the left
@@ -179,7 +194,6 @@ WQ_park_intersect = parks_clip_buffer.overlay(water305Assess_clip,how='intersect
 # ------ air quality data 
 #-------------------------
 pm25_park_intersect = parks_clip.overlay(block_pm25_clip,how='intersection')
-pm25_park_intersect.dtypes
 # parks_clip['OBJECTID'].is_unique # true = ID is applied to each park
 # pm25_park_intersect['OBJECTID'].is_unique # false = parks have multiple air quality data
 # parks_clip['SHAPE_Area'].is_unique # true
@@ -190,7 +204,6 @@ no2_park_intersect = parks_clip.overlay(block_no2_clip,how='intersection')
 # example: (A1*E1 + A2*E2)/(A1+A2)
 # find area of each intersection and join to the intersect object
 pm25_park_intersect = pm25_park_intersect.join(pm25_park_intersect.area.to_frame(name='intersect_Area'))
-# pm25_park_intersect.dtypes
 no2_park_intersect = no2_park_intersect.join(no2_park_intersect.area.to_frame(name='intersect_Area'))
 
 # multiply interesect area by air quality value for that area
@@ -213,7 +226,7 @@ pm25areaAvg = pm25_park['pm25area'].divide(pm25_park['SHAPE_Area'])
 no2areaAvg = no2_park['no2area'].divide(no2_park['SHAPE_Area'])
 
 # append area weighted averages to a new park object
-parks_environ = parks_clip.join(pm25areaAvg.to_frame(name='pm25areaAvg'))
+parks_environ = parks_environ.join(pm25areaAvg.to_frame(name='pm25areaAvg'))
 parks_environ = parks_environ.join(no2areaAvg.to_frame(name='no2areaAvg'))
 
 # visualize data in a plot
