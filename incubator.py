@@ -13,6 +13,7 @@ import geopandas as gpd
 import fiona
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 
 # ===============================================
 # =========== Import Data =======================
@@ -68,9 +69,9 @@ water305Assess = gpd.read_file("data/WQ_ENV_WQAssessmentCurrent.gdb",driver='Fil
 # assessmentUnitNumber says 'No Mappable Feature'
 water305Assess_clean = water305Assess[water305Assess['AssessmentUnitNumber'].str.contains('No Mappable Feature')== False]
 # shape: (27762, 16)
+# convert codes into numbers that can operate on late in code. store in the dataframe
 water305Assess_clean['CatCodeNum'] = [int(w[0]) for w in water305Assess_clean.CategoryCode]
 # NOTE: gives a warning, but seems to work. So keeping it.
-# convert codes into numbers that can operate on late in code. store in the dataframe
 # water305Assess_clean_num = water305Assess_clean.copy()
 # water305Assess_clean_num['CatCodeNum'] = None
 # water305Assess_clean_num.loc[:,'CatCodeNum'] = [int(w[0]) for w in water305Assess_clean.CategoryCode]
@@ -160,35 +161,41 @@ parks_environ = parks_clip.copy()
 # ---------------------------
 # ------- water quality data
 # ---------------------------
-parks_environ['WQ'] = None # create column to hold WQ data
 # plan: buffer parks by small amount. find intersection with King County water or WEQ water
 # if intersects with WEQ water ... assign the park the highest score of any intersected data
-# if intersects with King County water but not WEQ ... assign it a park with unkonwn quality
-# if intersects with neither .. assign it a park with no water
-# when do the buffer, we lose the other information in the park data frame. We only retain the geometry.
-parks_clip_buffer = parks_clip.copy() # had to use copy function in order to not affect parks_clip dataframe (not sure why)
+# if intersects with King County water but not WEQ ... assign it a park with unkonwn quality = 0
+# if intersects with neither .. assign it a park with no water = nan
+
+# create a new object that will hold buffered parks data and geometry. 
+# Had to start with park geodataframe and then change geometry to be buffered geometry
+# becuase when run buffer command, just get geometry out. No other data comes along.
+parks_clip_buffer = parks_clip.copy() # had to use copy function in order to not affect parks_clip dataframe 
 parks_clip_buffer.geometry = parks_clip.buffer(200)# in units of feet / Geoseries
 
-# base = water305Assess_clip.plot(column='CategoryCode',legend='true')
-# parks_clip_buffer.plot(ax=base,color='grey') 
-# parks_clip.plot(ax=base, color='black')
-# plt.show()
-
+# intersect buffered parks with water quality data and assign worst WQ code to the park
 WQ_park_intersect = parks_clip_buffer.overlay(water305Assess_clip,how='intersection') #shape: (4203, 30)
 WQ_park_intersect_max = WQ_park_intersect.groupby('OBJECTID')['CatCodeNum'].max() #len = 455
-parks_environ = parks_environ.merge(WQ_park_intersect_max, left_on='OBJECTID', right_on='OBJECTID')
+parks_environ = parks_environ.merge(WQ_park_intersect_max, how='left', left_on='OBJECTID', right_on='OBJECTID')
 # TODO: might not be appropriate to assign big parks to one WQ value
 
+# intersect buffered parks wtih water data layer from King County
 water_park_intersect = parks_clip_buffer.overlay(water_clip,how='intersection')
 water_park_intersect_size = water_park_intersect.groupby('OBJECTID_1')['OBJECTID_2'].size()
-parks_environ['WaterPark'] = parks_environ.merge(water_park_intersect_grp,left_on='OBJECTID',right_on='OBJECTID_1')
+parks_environ = parks_environ.merge(water_park_intersect_size,how='left', left_on='OBJECTID',right_on='OBJECTID_1')
+# find parks that have water but no water quality data. Assign these parks a value of 0
+# parks with no water keep nan code
+for i in range(len(parks_environ)):
+    if np.isnan(parks_environ.loc[i,'CatCodeNum']):
+        if not np.isnan(parks_environ.loc[i,'OBJECTID_2']):
+            parks_environ.loc[i,'CatCodeNum']=0
+# drop the column of data used to find parks with water but with no WQ data.
+# information now stored in 'CatCodeNum' column
+parks_environ = parks_environ.drop(columns=['OBJECTID_2'])
 
-base = parks_clip.plot(color='black') 
+# print result
+base = parks_clip.plot(color='grey') 
 parks_environ.plot(ax=base, column='CatCodeNum',legend='true')
 plt.show()
-
-# pull categories out and convert to numeric categories, then take max.
-# left join with parks on the left
 
 #-------------------------
 # ------ air quality data 
