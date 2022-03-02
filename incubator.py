@@ -80,15 +80,44 @@ water305Assess_clean['CatCodeNum'] = [int(w[0]) for w in water305Assess_clean.Ca
 # --------census data shape file
 # blockgroup = gpd.read_file("data/bg10/bg10.shp")
 block = gpd.read_file("data/block10/block10.shp")
+# # NOTE: 
+# Attribute_Label: POPHISP
+# Attribute_Definition: 2010 Census population, Hispanic or Latino (of any race)
+# Attribute:
+# Attribute_Label: POPWHITE2
+# Attribute_Definition: 2010 Census population, White Alone (not Hispanic or Latino)
+# Attribute:
+# Attribute_Label: POPBLACK2
+# Attribute_Definition:
+# 2010 Census population, Black or African American alone (not Hispanic or Latino)
+# Attribute:
+# Attribute_Label: POPAIAN2
+# Attribute_Definition:
+# 2010 Census population, American Indian and Alaska Native alone (not Hispanic or Latino)
+# Attribute:
+# Attribute_Label: POPASIAN2
+# Attribute_Definition: 2010 Census population, Asian alone (not Hispanic or Latino)
+# Attribute:
+# Attribute_Label: POPNHOPI2
+# Attribute_Definition:
+# 2010 Census population, Native Hawaiian and Other Pacific Islander alone (not Hispanic or Latino)
+# Attribute:
+# Attribute_Label: POPOTH2
+# Attribute_Definition:
+# 2010 Census population, Some Other Race alone (not Hispanic or Latino)
+# Attribute:
+# Attribute_Label: POPTWO2
+# Attribute_Definition:
+# 2010 Census population, Two or More Races (not Hispanic or Latino)
 
-# --------air quality data
+# # --------air quality data
 # pm25 = pd.read_csv("data/CACES_PM25_2015_censusblock.csv")
 pm25 = pd.read_csv("data/pm25block_wa_2015.csv")
 # pm25.dtypes
 no2 = pd.read_csv("data/no2block_wa_2015.csv")
 
 # -------- parkshed polygons
-parkshed_walk = gpd.read_file("data/parksheds_walk10min.geojson")
+parkshed_walk = gpd.read_file("data/park_isochrones_walk10.geojson")
 # (1435, 14)
 
 ######################################
@@ -129,25 +158,35 @@ block_int = block.astype({'GEOID10':"int64"}) # converting data types for merge
 block_pm25 = block_int.merge(pm25, left_on='GEOID10', right_on='block_fip')
 block_no2 = block_int.merge(no2, left_on='GEOID10', right_on='block_fip')
 
-# ---------- clip data with aoi
-block_int_clip = block_int.clip(aoi)
+# ---------- clip air quality data with aoi
 block_pm25_clip = block_pm25.clip(aoi)
 block_no2_clip = block_no2.clip(aoi)
+
+# ------------ clip block data and calculate block area
+block_int_clip = block_int.clip(aoi)
+block_int_clip = block_int_clip.join(block_int_clip.area.to_frame(name='Block_Area'))
+
+# ------------ add parkshed area information to parks object
+# parks_clip = parkshed_walk.join(parkshed_walk.area.to_frame(name='parkshed_walk_Area'))
+
+# ----------- create other objects that will modify below by copying park object
+# create a new dataframe called parks_environ that holds all the enviornmental data about each park
+parks_environ = parks_clip.copy()
+# create temperary dataframe for making calculations that will get entered into parks_environ
+park_tmp = parks_clip.copy()
+
 
 ########################################################################
 # -------- intersect data layers to get environmental & pop data at each park
 ########################################################################
 
-# create a new dataframe called parks_environ that holds all the enviornmental data about each park
-parks_environ = parks_clip.copy()
-
 # ---------------------------
 # ------- water quality data
 # ---------------------------
-# create a new object that will hold buffered parks data and geometry. 
+# create a new object that will hold buffered parks data and geometry for finding intersections with WQ data. 
 # Had to start with park geodataframe and then change geometry to be buffered geometry
 # becuase when run buffer command, just get geometry out. No other data comes along.
-parks_clip_buffer = parks_clip.copy() # had to use copy function in order to not affect parks_clip dataframe 
+parks_clip_buffer = parks_clip.copy()
 parks_clip_buffer.geometry = parks_clip.buffer(200)# in units of feet / Geoseries
 
 # intersect buffered parks with water quality data and assign worst WQ code to the park
@@ -201,7 +240,6 @@ no2_park_intersect = no2_park_intersect.join(no2area.to_frame(name='no2area'))
 # sum the multiplied values that exist within a given park and merge with parks into to a new park object
 pm25_park_areasum = pm25_park_intersect.groupby('OBJECTID')['pm25area'].sum()
 no2_park_areasum = no2_park_intersect.groupby('OBJECTID')['no2area'].sum()
-park_tmp = parks_clip.copy()
 park_tmp = park_tmp.merge(pm25_park_areasum,how='left', left_on='OBJECTID', right_on='OBJECTID')
 park_tmp = park_tmp.merge(no2_park_areasum,how='left', left_on='OBJECTID', right_on='OBJECTID')
 
@@ -220,34 +258,38 @@ parks_environ = parks_environ.join(no2areaAvg.to_frame(name='no2areaAvg'))
 parkshed_walk_block = parkshed_walk_clip.overlay(block_int_clip,how='intersection')
 # (127332, 52)
 # multiple census blocks within the parkshed. Need to calculate effective population
-
-# ------------calculated area-averaged values for population within each parkshed for each park
-# example: (A1*P1 + A2*P2)/(A1+A2)
-
-# NOTE: this calculation is not correct. Need to figure out what issue is
+# if a block is divided by the intersected area, assume the population is evently spread across that block
+# then use fraction of population that aligns with fraction of the area of the block in the parksehd
+# P*Area_intersect/Area_block
+# Then sum up all the people of a given race contained within the parkshed
 
 # find area of each intersection and join to the intersect object
 parkshed_walk_block = parkshed_walk_block.join(parkshed_walk_block.area.to_frame(name='intersect_Area'))
 
+# dasymetric mapping
 # multiply interesect area by population race for that area
 # join multiplied area to the intersect object
 poplist = ['POPHISP','POPWHITE2','POPBLACK2','POPAIAN2','POPASIAN2','POPNHOPI2','POPOTH2','POPTWO2']
 for pop in poplist:
-    calc = parkshed_walk_block['intersect_Area'] * parkshed_walk_block[pop]
-    colname = "Area_x_" + pop
+    calc = parkshed_walk_block[pop] * parkshed_walk_block['intersect_Area'] / parkshed_walk_block['Block_Area'] 
+    colname = "walk_" + pop
     parkshed_walk_block = parkshed_walk_block.join(calc.to_frame(name=colname))
-# sum multipled values with a given park and merage with parks into a temp park object
+# sum intersection population values with a given park and join to parks_environ
 for pop in poplist:
-    colname = "Area_x_" + pop
-    area = parkshed_walk_block.groupby('OBJECTID')[colname].sum()
-    park_tmp = park_tmp.merge(area,how='left',on='OBJECTID')
-# divide sum of multiplied values by total park area to get area weighted average
-# join area weighted averages to a parks_environ object
+    colname = "walk_" + pop
+    popsum = parkshed_walk_block.groupby('KCPARKFID')[colname].sum()
+    parks_environ = parks_environ.merge(popsum,how='left',on='KCPARKFID')
+parks_environ['walk_totalPop'] = (parks_environ['walk_POPHISP'] + parks_environ['walk_POPWHITE2'] + 
+    parks_environ['walk_POPBLACK2'] + parks_environ['walk_POPAIAN2'] + parks_environ['walk_POPASIAN2'] +      
+    parks_environ['walk_POPNHOPI2'] + parks_environ['walk_POPOTH2'] + parks_environ['walk_POPTWO2'])
 for pop in poplist:
-    colname = "Area_x_" + pop
-    areaavg = park_tmp[colname].divide(park_tmp['SHAPE_Area'])
-    colname1 = 'Walk_' + pop
-    parks_environ = parks_environ.join(areaavg.to_frame(name=colname1))
+    colname_left = "walk_pct_" + pop
+    colname_right = "walk_" + pop
+    parks_environ[colname_left] = parks_environ[colname_right] / parks_environ['walk_totalPop'] 
+parks_environ['walk_pct_NotWhite'] = (parks_environ['walk_POPHISP'] + parks_environ['walk_POPBLACK2'] + 
+     parks_environ['walk_POPAIAN2'] + parks_environ['walk_POPASIAN2'] +   parks_environ['walk_POPNHOPI2'] +   
+     parks_environ['walk_POPOTH2'] + parks_environ['walk_POPTWO2']) / parks_environ['walk_totalPop']
+
 
 ############################################
 # ---------- make plots of data -----------
@@ -288,17 +330,20 @@ parks_environ.plot(column='no2areaAvg',legend='true',
     'orientation': "horizontal"})
 plt.show()
 
-# visualize populations in walkable distance to parks
-# 8 populations. 2x4 subplot
-plt.figure(figsize=(15, 20))
-plt.subplots_adjust(hspace=0.5)
-loopnum = 0
-for pop in poplist:
-    loopnum = loopnum +1
-    colname = "Walk_" + pop
-    ax = plt.subplot(4,2,loopnum)
-    parks_environ.plot(ax=ax,column=colname,legend='true',legend_kwds={'label': 
-    colname, 'orientation': "horizontal"})
+# ------ population information from block data
+block_int_clip.plot(column='POPWHITE2',legend='true',
+    legend_kwds={'label': "White Population",
+    'orientation': "horizontal"})
 plt.show()
-# plotting does not seem correct.
 
+# plot total population served and percent non-white
+plt.figure()
+plt.subplot(2,1,1)
+parks_environ.plot(ax=plt.gca(),column='walk_totalPop',legend='true',legend_kwds={'label': 
+    'walk total pop', 'orientation': "horizontal"})
+plt.subplot(2,1,2)
+parks_environ.plot(ax=plt.gca(),column='walk_pct_NotWhite',legend='true',legend_kwds={'label': 
+    'walk % nonwhite', 'orientation': "horizontal"})
+plt.show()
+# NOTE: there is a funny result in upper right hand corner where we have 100% non white.
+# the population total might just be zero there? I wonder what the walkshed looks like there?
