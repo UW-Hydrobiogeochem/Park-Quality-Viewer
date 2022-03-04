@@ -9,11 +9,15 @@
 # Import Libraries
 #$ python get-pip.py
 #pip install geopandas 
+#pip install plotly==5.6.0
+
 import geopandas as gpd
 import fiona
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 
 # ===============================================
 # =========== Import Data =======================
@@ -347,3 +351,19 @@ parks_environ.plot(ax=plt.gca(),column='walk_pct_NotWhite',legend='true',legend_
 plt.show()
 # NOTE: there is a funny result in upper right hand corner where we have 100% non white.
 # the population total might just be zero there? I wonder what the walkshed looks like there?
+
+##############################################
+# ------------- Scatter Plots ---------------
+##############################################
+
+# compare park demographic data against park environmental quality data
+fig1 = px.scatter(parks_environ,x='walk_totalPop',y='pm25areaAvg',color='walk_pct_NotWhite', hover_data=['SITENAME'])
+fig1.show()
+fig2 = px.scatter(parks_environ,x='walk_totalPop',y='no2areaAvg',color='walk_pct_NotWhite', hover_data=['SITENAME'])
+fig2.show()
+
+# water quality
+parks_environ_plot = parks_environ[pd.notna(parks_environ['CatCodeNum'])]
+fig = px.scatter(parks_environ_plot,x='walk_totalPop',y='walk_pct_NotWhite' ,color='CatCodeNum', 
+    hover_data=['SITENAME'],color_continuous_scale=px.colors.sequential.Sunsetdark)
+fig.show()
