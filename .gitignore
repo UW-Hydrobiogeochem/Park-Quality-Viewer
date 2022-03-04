@@ -4,6 +4,6 @@ data/
 outputs/
 .ipynb_checkpoints/
 *.ipynb
-
+get-pip.py
 .DS_Store
 
