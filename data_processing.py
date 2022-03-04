@@ -1,10 +1,8 @@
 
-# Here is where the code lives
-
-# Motivation: 
-# Green and blue spaces in urban areas provide refuge against hot temperatures
-# Areas in King County impacted by air and water pollution
-# Important to understand benefits and risks associated with existing and planned spaces for climate adaptation
+# Goals and motivation of this script:
+#   Green and blue spaces in urban areas provide refuge against hot temperatures
+#   Areas in King County impacted by air and water pollution
+#   Important to understand benefits and risks associated with existing and planned spaces for climate adaptation
 
 # Import Libraries
 #$ python get-pip.py
