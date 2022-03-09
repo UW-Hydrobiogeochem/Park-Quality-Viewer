@@ -21,10 +21,17 @@ import plotly.graph_objects as go
 # =========== Import Data =======================
 # ===============================================
 
-#------- King County Data
+#--------- King County Parks
 parks = gpd.read_file("data/Parks_in_King_County___park_area.geojson") # confirmed only polygons in this file
+# removing wilderness (the only USFS-managed areas in the King Co dataset)
+parks = parks[parks.MANAGER != 'US Forest Service']
+# additionally the current file distributed from King Co has a geometry error that can be resolved with
+parks.geometry = parks.buffer(0)
+
+#--------- King County Waterbodies
 water = gpd.read_file("data/Open_water_for_King_County_and_portions_of_adjacent_counties___wtrbdy_area.geojson")
-# Area of interest
+
+#--------- Area of interest
 aoi = gpd.read_file("data/King_County_Political_Boundary_(no_waterbodies)___kingco_area.geojson")    
 
 #--------- WA DEQ polluted water bodies
@@ -148,8 +155,7 @@ parkshed_walk = parkshed_walk.to_crs(2927)
 # ---------- Align, filter, merge, clip data  ------
 #####################################################
 # ---------- clip data with aoi
-#parks_clip = parks.clip(aoi)
-parks_clip = parks # getting error when clipping, skip clip for now
+parks_clip = parks.clip(aoi)
 water_clip = water.clip(aoi)
 water305Assess_clip = water305Assess_clean.clip(aoi) 
 parkshed_walk_clip = parkshed_walk.clip(aoi)
