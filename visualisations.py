@@ -5,6 +5,7 @@
 # that we will share publicly
 #
 
+import pandas as pd
 import geopandas as gpd
 from keplergl import KeplerGl
 import plotly.express as px
@@ -351,16 +352,26 @@ map.save_to_html(data={'Park Quality': parks_environ}, config=config, file_name=
 
 ##############################################
 # ------------- Scatter Plots ---------------
-##############################################
+#############################################
 
-# # compare park demographic data against park environmental quality data
-# fig1 = px.scatter(parks_environ,x='walk_totalPop',y='pm25areaAvg',color='walk_pct_NotWhite', hover_data=['SITENAME'])
-# fig1.show()
-# fig2 = px.scatter(parks_environ,x='walk_totalPop',y='no2areaAvg',color='walk_pct_NotWhite', hover_data=['SITENAME'])
-# fig2.show()
+# compare park demographic data against park environmental quality data
+fig1 = px.scatter(parks_environ,x='Total Walkable Pop',y='PM 2.5 (ug/m^3)',color='Frac Non-White Walkable Pop',
+  color_continuous_scale=px.colors.sequential.Sunsetdark,
+  hover_data=['SITENAME'],log_x=True, range_x=[1, 100000],template='plotly_white')
+#fig1.show()
+fig1.write_html("outputs/pm25.html")
+fig2 = px.scatter(parks_environ,x='Total Walkable Pop',y='NO2 (ppb)',color='Frac Non-White Walkable Pop',
+  color_continuous_scale=px.colors.sequential.Sunsetdark,
+  hover_data=['SITENAME'],log_x=True, range_x=[1, 100000],template='plotly_white')
+#fig2.show()
+fig2.write_html("outputs/no2.html")
 
-# # water quality
-# parks_environ_plot = parks_environ[pd.notna(parks_environ['CatCodeNum'])]
-# fig = px.scatter(parks_environ_plot,x='walk_totalPop',y='walk_pct_NotWhite' ,color='CatCodeNum', 
-#     hover_data=['SITENAME'],color_continuous_scale=px.colors.sequential.Sunsetdark)
-# fig.show()
+# water quality
+parks_environ_plot = parks_environ[pd.notna(parks_environ['WQ Category'])]
+parks_environ_plot = parks_environ_plot.sort_values(by=['WQ Category'],ascending=False)
+parks_environ_plot["WQ Category"] = parks_environ_plot.loc[:,"WQ Category"].astype(str)
+fig3 = px.scatter(parks_environ_plot,x='Total Walkable Pop',y='Frac Non-White Walkable Pop',
+  color='WQ Category', color_discrete_sequence=['maroon','crimson','darksalmon','darkcyan','silver'],
+  hover_data=['SITENAME'],log_x=True, range_x=[1, 100000],template='plotly_white')
+#fig3.show()
+fig3.write_html("outputs/waterquality.html")
