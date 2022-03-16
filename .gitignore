@@ -1,9 +1,14 @@
 
 # Don't push any of these files to the repo
 data/
-outputs/
+outputs/*
 .ipynb_checkpoints/
 *.ipynb
 get-pip.py
 .DS_Store
 
+# Except the visuals which are required
+!outputs/kingco_parks.html
+!outputs/no2.html
+!outputs/pm25.html
+!outputs/waterquality.html
