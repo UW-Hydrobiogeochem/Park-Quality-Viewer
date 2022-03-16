@@ -9,3 +9,6 @@ get-pip.py
 
 # Except the visuals which are required
 !outputs/kingco_parks.html
+!outputs/no2.html
+!outputs/pm25.html
+!outputs/waterquality.html
