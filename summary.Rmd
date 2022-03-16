@@ -11,8 +11,13 @@ always_allow_html: true
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Our first map, showing all King Co parks
+## Overview
+
+## Spatial View of Park Quality
 
 <iframe src="outputs/kingco_parks.html" width=800 height="500" style="border: none;" data-external="1"></iframe>
 
-## Another section
+## Benefit-Risk Relationships
+Goal is to maximize the benefit and minimize the risk with an equity lens.
+
+## Key Results
